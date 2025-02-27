@@ -1,0 +1,413 @@
+Python
+
+import os
+import json
+import random
+import string
+import secrets
+import time
+import logging
+import boto3
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from botocore.config import Config
+
+rds_client = boto3.client('rds')
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Configure boto3 retry logic
+boto_config = Config(
+    retries={
+        'max_attempts': 5,
+        'mode': 'standard'
+    }
+)
+
+def backoff(delay=2, retries=3, max_delay=0):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            current_retry = 0
+            current_delay = delay
+            while current_retry < retries:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    current_retry += 1
+                    if current_retry >= retries:
+                        raise e
+                    print(f"Failed to execute function '{func.__name__}'. Retrying in {current_delay} seconds...")
+                    time.sleep(current_delay)
+                    if max_delay > 0:
+                        current_delay = min(current_delay * 2, max_delay)
+                    else:
+                        current_delay *= 2
+        return wrapper
+    return decorator
+
+def get_random_password(length=16): 
+    """Generate a random password that complies with AWS RDS requirements.""" 
+    allowed_special_chars = "!#$%&()*+,-.:;<=>?[]^_{|}~"  # Excludes '/', '@', '"', and ' '
+    alphabet = string.ascii_letters + string.digits + allowed_special_chars
+ 
+    while True: 
+        password = ''.join(secrets.choice(alphabet) for _ in range(length)) 
+        if (any(c.islower() for c in password) 
+            and any(c.isupper() for c in password) 
+            and sum(c.isdigit() for c in password) >= 3): 
+            break 
+ 
+    return password
+
+def change_rds_password(db_instance_identifier, new_password):
+    """Reset RDS Password and wait for AWS to apply changes"""
+    try:
+        response = rds_client.modify_db_instance(
+            DBInstanceIdentifier=db_instance_identifier,
+            MasterUserPassword=new_password,
+            ApplyImmediately=True
+        )
+        logger.info(f"Successfully changed RDS password for instance {db_instance_identifier}")
+
+        # Wait for the password update to take effect
+        time.sleep(60)  # Add a delay before attempting connection
+        
+    except Exception as e:
+        logger.error(f"Failed to change RDS password: {e}")
+        raise
+
+
+def lambda_handler(event, context):
+    """
+    Accepts a dictionary with the database data
+    :param event: The event dict that contains the parameters sent when the function is invoked.
+    :param context: The context in which the function is called.
+    :return: The result of the action.
+    """
+
+    db_host = os.environ.get('DB_HOST')
+    db_port = os.environ.get('DB_PORT')
+    default_db_name = os.environ.get('DEFAULT_DB_NAME')
+    default_db_user = os.environ.get('DEFAULT_DB_USER')  # secondary admin account
+    default_db_master = os.environ.get('DEFAULT_DB_MASTER')
+    postgres_admin_default = os.environ.get('POSTGRES_ADMIN_DEFAULT')  # Replace master user with this
+    db_instance_identifier = os.environ.get('DB_INSTANCE_IDENTIFIER')
+
+    dba_user = os.environ.get('DBA_USER')
+    scan_user = os.environ.get('SCAN_USER')
+
+    action = event.get('action')
+    if action == 'initial_setup':
+        # Generate a random password
+        new_password = get_random_password()
+        # Change the RDS password
+        change_rds_password(db_instance_identifier=db_instance_identifier, new_password=new_password)
+        # Perform initial setup with the new password
+        perform_initial_setup(db_host=db_host, db_port=db_port, default_db_name=default_db_name,
+                      default_db_master=default_db_master,  # <-- Add back this
+                      default_db_user=default_db_user, dba_user=dba_user,
+                      scan_user=scan_user, db_password=new_password)
+
+    elif action == 'db_user_setup':
+        app_db_name = event.get('database')
+        app_db_user = event.get('username')
+        db_password = event.get('db_password')  # This should be the password generated during initial setup
+        db_and_users_setup(db_host=db_host, db_port=db_port, default_db_name=default_db_name,
+                           default_db_master=default_db_master, app_db_name=app_db_name, app_db_user=app_db_user,
+                           dba_user=dba_user, scan_user=scan_user, db_password=db_password)
+    
+    elif action == 'change_rds_password':
+        new_password = get_random_password()
+        db_instance_identifier = event.get('db_instance_identifier')
+        logger.info(f"Resetting password for DB Instance: {db_instance_identifier}")
+        change_rds_password(db_instance_identifier=db_instance_identifier, new_password=new_password)
+    
+    else:
+        msg = f"Unsupported action: {action}"
+        logger.error(msg)
+        raise Exception(msg)
+
+def perform_initial_setup(db_host, db_port, default_db_name, default_db_master, default_db_user, dba_user, scan_user, db_password):
+    """    
+    This function performs the initial setup of the database instance with default users and permissions
+    :param db_host:
+    :param db_port:
+    :param default_db_name:
+    :param default_db_user:
+    :param dba_user:
+    :param scan_user:
+    :param db_password:
+    :return:
+    """
+    connection = None
+
+    logger.info(f"Getting DB connection using provided credentials for user {default_db_master}")
+    logger.info(f"Using password for connection: {db_password}")
+
+    try:
+        logger.info("Using RDS master user for first-time setup only...")
+        connection = get_connection(host=db_host, port=db_port, db_name=default_db_name, user=default_db_master,
+                                    db_password=db_password)
+
+        # After initial setup, switch to `postgres_admin_default`
+        logger.info("Creating `postgres_admin_default` for future privileged access...")
+        cursor = connection.cursor()
+        cursor.execute(f"CREATE USER \"postgres_admin_default\" WITH LOGIN;")
+        cursor.execute(f"GRANT rds_superuser TO \"postgres_admin_default\";")
+        cursor.execute(f"GRANT rds_iam TO \"postgres_admin_default\";")
+        cursor.execute(f"ALTER USER \"postgres_admin_default\" WITH PASSWORD NULL;")  # Enforce IAM auth
+
+        logger.info("Disabling master user post-setup...")
+        cursor.execute(f"ALTER USER \"{default_db_master}\" WITH NOLOGIN;")  # Disable Master user
+
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {e}")
+
+    cursor = None
+    try:
+        cursor = connection.cursor()
+        if not role_exists(cursor=cursor, role_name=default_db_user):
+            logger.info(f"Creating user: {default_db_user}...")
+            cursor.execute(f"CREATE USER \"{default_db_user}\" WITH LOGIN;")
+            logger.info(f"✅ Successfully created user `{default_db_user}`")
+
+        logger.info(f"Granting IAM authentication to `{default_db_user}`...")
+        cursor.execute(f"GRANT rds_iam TO \"{default_db_user}\";")
+        logger.info(f"✅ `{default_db_user}` can now authenticate using IAM.")
+
+        logger.info(f"Granting superuser privileges to `{default_db_user}`...")
+        cursor.execute(f"GRANT rds_superuser TO \"{default_db_user}\";")
+        logger.info(f"✅ `{default_db_user}` is now an RDS superuser.")
+
+        logger.info(f"Grant rds_superuser to {default_db_user}")
+        cursor.execute(f"GRANT rds_superuser TO \"{default_db_user}\";")
+        logger.info(f"Clearing password for {default_db_user} to enforce IAM auth")
+        cursor.execute(f"ALTER USER \"{default_db_user}\" WITH PASSWORD NULL;")
+
+        if not role_exists(cursor=cursor, role_name=dba_user):
+            logger.info(f"CREATE USER {dba_user}")
+            cursor.execute(f"CREATE USER \"{dba_user}\" WITH LOGIN;")
+        else:
+            logger.info(f"User {dba_user} already exists")
+        logger.info(f"Grant rds_iam to {dba_user}")
+        cursor.execute(f"GRANT rds_iam TO \"{dba_user}\";")
+
+        if not role_exists(cursor=cursor, role_name=scan_user):
+            logger.info(f"CREATE USER {scan_user}")
+            cursor.execute(f"CREATE USER \"{scan_user}\" WITH LOGIN;")
+        else:
+            logger.info(f"User {scan_user} already exists")
+
+        logger.info(f"Setting permissions on: {scan_user}")
+        role_scan_stmt = f"GRANT USAGE ON SCHEMA public TO \"{scan_user}\"; "
+        role_scan_stmt += f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{scan_user}\"; "
+        role_scan_stmt += f"GRANT rds_iam TO \"{scan_user}\";"
+        cursor.execute(role_scan_stmt)
+
+        logger.info(f"DEFAULT PERMISSIONS")
+        permissions_stmt = f"REVOKE CONNECT ON DATABASE \"{default_db_name}\" FROM public; "
+        permissions_stmt += f"GRANT CONNECT ON DATABASE \"{default_db_name}\" TO \"{default_db_user}\"; "
+        permissions_stmt += f"GRANT CONNECT ON DATABASE \"{default_db_name}\" TO \"{scan_user}\"; "
+        permissions_stmt += f"GRANT CONNECT ON DATABASE \"{default_db_name}\" TO \"{dba_user}\"; "
+        cursor.execute(permissions_stmt)
+
+    except Exception as e:
+        logger.error(f"Failed to setup default users and permissions: {e}")
+        raise
+    finally:
+        if cursor:
+            cursor.close()
+        if connection:
+            connection.close()
+
+    logger.info("Waiting 30 seconds for IAM authentication to propagate before testing user access...")
+    time.sleep(30)  # Wait for IAM authentication propagation
+
+    for user in [default_db_user, scan_user, dba_user]:
+        logger.info(f"Testing connection with IAM token for user {user}")
+        test_connection(db_host=db_host, db_port=db_port, db_name=default_db_name, db_user=user)
+    if cursor.closed:
+        logger.warning("Cursor was closed before executing ALTER USER. Re-opening it.")
+        cursor = connection.cursor()  # Reopen cursor if closed
+
+    logger.info("Disabling the default master user post-setup")
+    cursor.execute(f"ALTER USER \"{default_db_master}\" WITH NOLOGIN;")  # Prevents future logins
+
+
+def db_and_users_setup(db_host, db_port, default_db_name, default_db_master, app_db_name, app_db_user, dba_user,
+                       scan_user, db_password):
+    """"""
+    logger.info("Performing DB and users setup")
+
+    default_connection = None
+
+    logger.info(f"Getting DB connection for user {default_db_master}")
+
+    try:
+        default_connection = get_connection(host=db_host, port=db_port, db_name=default_db_name, user="postgres_admin_default",
+                                    db_password=None, rds_auth=True)
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {e}")
+        raise
+
+    default_cursor = None
+    db_connection = None
+    db_cursor = None
+
+    try:
+        default_cursor = default_connection.cursor()
+        if not db_exists(cursor=default_cursor, db_name=app_db_name):
+            logger.info(f"Creating db {app_db_name} as the user {default_db_master}")
+            default_cursor.execute(f"CREATE DATABASE \"{app_db_name}\";")
+            logger.info("DB created successfully")
+        else:
+            logger.info(f"DB {app_db_name} already exists")
+
+        logger.info(f"Attempting to connect to {db_host}:{db_port} as {default_db_master} using new password.")
+        db_connection = get_connection(host=db_host, port=db_port, db_name=app_db_name, user="postgres_admin_default",
+                               db_password=None, rds_auth=True)
+        db_cursor = db_connection.cursor()
+
+        # Create role for DB App User
+        app_role = f"{app_db_name}_app_role"
+        if not role_exists(cursor=db_cursor, role_name=app_role):
+            logger.info(f"Creating app_role: {app_role}")
+            db_cursor.execute(f"CREATE ROLE \"{app_role}\";")
+        else:
+            logger.info(f"the role already exists: {app_role}")
+
+        logger.info("Setting application role permissions")
+        app_role_permissions = f"REVOKE CONNECT ON DATABASE \"{app_db_name}\" FROM public; "
+        # app_role_permissions += f"GRANT CONNECT ON DATABASE \"{app_db_name}\" TO \"{default_db_user}\"; "
+        app_role_permissions += f"GRANT CONNECT ON DATABASE \"{app_db_name}\" TO \"{scan_user}\"; "
+        app_role_permissions += f"GRANT CONNECT ON DATABASE \"{app_db_name}\" TO \"{dba_user}\"; "
+        # necessary to grant permissions to dba_user to assume app_role (`set role app_role`)
+        # when dba_user modifies the schema or create any object within the database
+        app_role_permissions += f"GRANT \"{app_role}\" TO \"{dba_user}\"; "
+        # necessary to set up default privileges on app_role
+        # app_role_permissions += f"GRANT \"{app_role}\" TO \"{default_db_user}\"; "
+        # set default privileges on dba_user and app_role
+        app_role_permissions += f"SET ROLE TO \"{app_role}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT ALL PRIVILEGES ON TABLES TO \"{dba_user}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT ALL PRIVILEGES ON SEQUENCES TO \"{dba_user}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT ALL PRIVILEGES ON FUNCTIONS TO \"{dba_user}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT ALL PRIVILEGES ON TYPES TO \"{dba_user}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT ALL PRIVILEGES ON SCHEMAS TO \"{dba_user}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT SELECT ON TABLES TO \"{scan_user}\"; "
+        app_role_permissions += f"ALTER DEFAULT PRIVILEGES FOR ROLE \"{app_role}\" GRANT USAGE ON SCHEMAS TO \"{scan_user}\"; "
+        app_role_permissions += f"SET ROLE TO \"{default_db_master}\"; "
+
+        db_cursor.execute(app_role_permissions)
+        logger.info("Application role permissions added")
+
+        logger.info(f"Creating/modifying application user: {app_db_user}")
+
+        # app_user_stmt = f"SET ROLE \"{default_db_user}\"; "
+        app_user_stmt = f"DO $do$ BEGIN IF NOT EXISTS (select from pg_user where usename='{app_db_user}') THEN create user \"{app_db_user}\" with login; END IF; END $do$; "
+        # set public schema permission explicitly as needed for postgres version > 15.x
+        app_user_stmt += f"GRANT ALL PRIVILEGES ON SCHEMA public TO \"{app_role}\"; "
+        app_user_stmt += f"ALTER ROLE \"{app_db_user}\" SET ROLE \"{app_role}\"; "
+        app_user_stmt += f"GRANT rds_iam,\"{app_role}\" TO \"{app_db_user}\"; "
+        # app_user_stmt += f"GRANT CONNECT ON DATABASE \"{app_db_name}\" TO \"{app_role}\"; "
+        db_cursor.execute(app_user_stmt)
+
+        db_cursor.execute(f"GRANT ALL ON DATABASE \"{app_db_name}\" TO \"{app_role}\";")
+
+        logger.info(f"Setting pgaudit config on db {app_db_name}")
+        pg_audit_statement = f"ALTER DATABASE \"{app_db_name}\" SET pgaudit.log='ddl,role,misc';"
+        db_cursor.execute(pg_audit_statement)
+
+    except Exception as e:
+        logger.error(f"Failed to setup default users and permissions: {e}")
+        raise
+    finally:
+        if default_cursor:
+            default_cursor.close()
+        if default_connection:
+            default_connection.close()
+        if db_cursor:
+            db_cursor.close()
+        if db_connection:
+            db_connection.close()
+
+
+@backoff(retries=5)
+def get_connection(host, port, db_name, user, db_password, rds_auth=False):
+    """Attempt to connect and authenticate to a PostgreSQL instance
+    This helper function tries to connect to the database using connectivity info passed in.
+    If successful, it returns the connection, else None
+    Args:
+        - db_password (str): The database password (optional)
+        - port (int): The database port to connect to
+        - user (str): Database user
+        - db_name (str): Name of the database
+        - host (str): The host of the RDS Instance
+        - rds_auth (bool): RDS authentication (optional)
+    Returns:
+        Connection: The psycopg2.connection object if successful. None otherwise
+    Raises:
+        KeyError: If the secret json does not contain the expected keys
+    """
+    # Try to obtain a connection to the db
+    try:
+        # If you are authenticating with RDS_IAM, don't use the credentials dict
+        if rds_auth or user == "postgres_admin_default":
+            client = boto3.client('rds', config=boto_config)
+            password = client.generate_db_auth_token(DBHostname=host, Port=port, DBUsername=user)
+        else:
+            password = db_password
+        conn = psycopg2.connect(
+            host=host,
+            user=user,
+            password=password,
+            dbname=db_name,
+            port=port,
+            connect_timeout=5,
+            sslmode='require')
+        conn.autocommit = True
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT);
+        return conn
+    except psycopg2.OperationalError as error:  # Authentication failed
+        logger.error(f"IAM authentication failed for `{db_user}` on `{db_name}`: {error}")
+        logger.info(f"Retrying IAM authentication for `{db_user}`...")
+        raise
+
+@backoff(retries=20, max_delay=60)
+def test_connection(db_host, db_port, db_name, db_user):
+    """Attempt to connect and authenticate to a PostgreSQL instance
+    This helper function tries to connect to the database using connectivity info passed in.
+    If successful, it returns the connection, else None
+    Args:
+        - db_user (str): Database user
+        - db_port (int): The database port to connect to
+        - db_host (str): The host of the RDS Instance
+        - db_name (str): Name of the database to connect to
+    Raises:
+        KeyError: If the secret json does not contain the expected keys
+    """
+    # Try to obtain a connection to the db
+    client = boto3.client('rds',config=boto_config)
+    db_password = client.generate_db_auth_token(DBHostname=db_host, Port=db_port, DBUsername=db_user)
+    connection = None
+    try:
+        connection = psycopg2.connect(
+            host=db_host,
+            user=db_user,
+            password=db_password,
+            dbname=db_name,
+            port=db_port,
+            connect_timeout=5,
+            sslmode='require')
+        logger.info(f"Successfully connected to '{db_name}' with user '{db_user}'")
+    except psycopg2.OperationalError as error:  # Authentication failed
+        logger.error(f"Failed to connect to database '{db_name}' for user '{db_user}' with error {error}")
+        raise
+    finally:
+        if connection:
+            connection.close()
+
+
+def role_exists(cursor, role_name):
+    """
+        Returns True if the role pas
