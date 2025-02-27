@@ -1,0 +1,124 @@
+Log events
+
+Actions
+Start tailing
+Create metric filter
+You can use the filter bar below to search for and match terms, phrases, or values in your log events. Learn more about filter patterns
+
+1m
+1h
+
+
+UTC timezone
+Display
+
+Timestamp
+
+Message
+
+No older events at this moment.
+Retry
+2025-02-26T05:30:26.770Z
+INIT_START Runtime Version: python:3.9.v64 Runtime Version ARN: arn:aws:lambda:ca-central-1::runtime:57e9dce4a928fd5b7bc1015238a5bc8a9146f096d69571fa4219ed8a2e76bfdf
+2025-02-26T05:30:27.276Z
+START RequestId: 345c4e7e-fba3-4b58-8805-2c70b576b923 Version: $LATEST
+2025-02-26T05:30:27.831Z
+[INFO] 2025-02-26T05:30:27.831Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully changed RDS password for instance dev-aws2-corepipeli-psql-full-instance
+2025-02-26T05:31:27.891Z
+[INFO] 2025-02-26T05:31:27.891Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Getting DB connection using provided credentials for user postgres_master
+2025-02-26T05:31:27.891Z
+[INFO] 2025-02-26T05:31:27.891Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Using password for connection: eA|sRTC#<Wk3n20y
+2025-02-26T05:31:27.891Z
+[INFO] 2025-02-26T05:31:27.891Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Using RDS master user for first-time setup only...
+2025-02-26T05:31:28.191Z
+[INFO] 2025-02-26T05:31:28.191Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Creating `postgres_admin_default` for future privileged access...
+2025-02-26T05:31:28.192Z
+[ERROR] 2025-02-26T05:31:28.192Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Failed to connect to database: role "postgres_admin_default" already exists
+
+
+[ERROR] 2025-02-26T05:31:28.192Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Failed to connect to database: role "postgres_admin_default" already exists
+2025-02-26T05:31:28.196Z
+[INFO] 2025-02-26T05:31:28.195Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Granting IAM authentication to `postgres_admin_default`...
+
+[INFO] 2025-02-26T05:31:28.195Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Granting IAM authentication to `postgres_admin_default`...
+2025-02-26T05:31:28.197Z
+[INFO] 2025-02-26T05:31:28.197Z 345c4e7e-fba3-4b58-8805-2c70b576b923 ✅ `postgres_admin_default` can now authenticate using IAM.
+
+[INFO] 2025-02-26T05:31:28.197Z 345c4e7e-fba3-4b58-8805-2c70b576b923 ✅ `postgres_admin_default` can now authenticate using IAM.
+2025-02-26T05:31:28.197Z
+[INFO] 2025-02-26T05:31:28.197Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Granting superuser privileges to `postgres_admin_default`...
+
+[INFO] 2025-02-26T05:31:28.197Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Granting superuser privileges to `postgres_admin_default`...
+2025-02-26T05:31:28.211Z
+[INFO] 2025-02-26T05:31:28.211Z 345c4e7e-fba3-4b58-8805-2c70b576b923 ✅ `postgres_admin_default` is now an RDS superuser.
+
+[INFO] 2025-02-26T05:31:28.211Z 345c4e7e-fba3-4b58-8805-2c70b576b923 ✅ `postgres_admin_default` is now an RDS superuser.
+2025-02-26T05:31:28.211Z
+[INFO] 2025-02-26T05:31:28.211Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Grant rds_superuser to postgres_admin_default
+
+[INFO] 2025-02-26T05:31:28.211Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Grant rds_superuser to postgres_admin_default
+2025-02-26T05:31:28.211Z
+[INFO] 2025-02-26T05:31:28.211Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Clearing password for postgres_admin_default to enforce IAM auth
+
+[INFO] 2025-02-26T05:31:28.211Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Clearing password for postgres_admin_default to enforce IAM auth
+2025-02-26T05:31:28.215Z
+[INFO] 2025-02-26T05:31:28.215Z 345c4e7e-fba3-4b58-8805-2c70b576b923 User dba_role already exists
+2025-02-26T05:31:28.215Z
+[INFO] 2025-02-26T05:31:28.215Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Grant rds_iam to dba_role
+2025-02-26T05:31:28.231Z
+[INFO] 2025-02-26T05:31:28.230Z 345c4e7e-fba3-4b58-8805-2c70b576b923 User scan_role already exists
+2025-02-26T05:31:28.231Z
+[INFO] 2025-02-26T05:31:28.231Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Setting permissions on: scan_role
+2025-02-26T05:31:28.237Z
+[INFO] 2025-02-26T05:31:28.237Z 345c4e7e-fba3-4b58-8805-2c70b576b923 DEFAULT PERMISSIONS
+2025-02-26T05:31:28.243Z
+[INFO] 2025-02-26T05:31:28.242Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Waiting 30 seconds for IAM authentication to propagate before testing user access...
+
+[INFO] 2025-02-26T05:31:28.242Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Waiting 30 seconds for IAM authentication to propagate before testing user access...
+2025-02-26T05:31:58.273Z
+[INFO] 2025-02-26T05:31:58.273Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Testing connection with IAM token for user postgres_admin_default
+
+[INFO] 2025-02-26T05:31:58.273Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Testing connection with IAM token for user postgres_admin_default
+2025-02-26T05:31:58.879Z
+[INFO] 2025-02-26T05:31:58.879Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully connected to 'postgres' with user 'postgres_admin_default'
+
+[INFO] 2025-02-26T05:31:58.879Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully connected to 'postgres' with user 'postgres_admin_default'
+2025-02-26T05:31:58.879Z
+[INFO] 2025-02-26T05:31:58.879Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Testing connection with IAM token for user scan_role
+
+[INFO] 2025-02-26T05:31:58.879Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Testing connection with IAM token for user scan_role
+2025-02-26T05:31:59.043Z
+[INFO] 2025-02-26T05:31:59.042Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully connected to 'postgres' with user 'scan_role'
+
+[INFO] 2025-02-26T05:31:59.042Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully connected to 'postgres' with user 'scan_role'
+2025-02-26T05:31:59.043Z
+[INFO] 2025-02-26T05:31:59.043Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Testing connection with IAM token for user dba_role
+
+[INFO] 2025-02-26T05:31:59.043Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Testing connection with IAM token for user dba_role
+2025-02-26T05:31:59.176Z
+[INFO] 2025-02-26T05:31:59.176Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully connected to 'postgres' with user 'dba_role'
+
+[INFO] 2025-02-26T05:31:59.176Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Successfully connected to 'postgres' with user 'dba_role'
+2025-02-26T05:31:59.176Z
+[WARNING] 2025-02-26T05:31:59.176Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Cursor was closed before executing ALTER USER. Re-opening it.
+
+[WARNING] 2025-02-26T05:31:59.176Z 345c4e7e-fba3-4b58-8805-2c70b576b923 Cursor was closed before executing ALTER USER. Re-opening it.
+2025-02-26T05:31:59.190Z
+LAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html
+
+LAMBDA_WARNING: Unhandled exception. The most likely cause is an issue in the function code. However, in rare cases, a Lambda runtime update can cause unexpected function behavior. For functions using managed runtimes, runtime updates can be triggered by a function change, or can be applied automatically. To determine if the runtime has been updated, check the runtime version in the INIT_START log entry. If this error correlates with a change in the runtime version, you may be able to mitigate this error by temporarily rolling back to the previous runtime version. For more information, see https://docs.aws.amazon.com/lambda/latest/dg/runtimes-update.html
+2025-02-26T05:31:59.191Z
+[ERROR] InterfaceError: connection already closed
+Traceback (most recent call last):
+  File "/var/task/rds_enable_iam_auth_master_user.py", line 105, in lambda_handler
+    perform_initial_setup(db_host=db_host, db_port=db_port, default_db_name=default_db_name,
+  File "/var/task/rds_enable_iam_auth_master_user.py", line 230, in perform_initial_setup
+    cursor = connection.cursor()  # Reopen cursor if closed
+
+[ERROR] InterfaceError: connection already closed Traceback (most recent call last):   File "/var/task/rds_enable_iam_auth_master_user.py", line 105, in lambda_handler     perform_initial_setup(db_host=db_host, db_port=db_port, default_db_name=default_db_name,   File "/var/task/rds_enable_iam_auth_master_user.py", line 230, in perform_initial_setup     cursor = connection.cursor() # Reopen cursor if closed
+2025-02-26T05:31:59.192Z
+END RequestId: 345c4e7e-fba3-4b58-8805-2c70b576b923
+2025-02-26T05:31:59.192Z
+REPORT RequestId: 345c4e7e-fba3-4b58-8805-2c70b576b923 Duration: 91916.40 ms Billed Duration: 91917 ms Memory Size: 128 MB Max Memory Used: 87 MB Init Duration: 504.69 ms XRAY TraceId: 1-67bea6f2-20addbef5403ada81dedcdba SegmentId: 7e19d25f62edefb6 Sampled: true
+No newer events at this moment.
+Auto retry paused.
