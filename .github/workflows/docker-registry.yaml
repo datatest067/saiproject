@@ -9,10 +9,10 @@ on:
       registry:
         required: true
         type: string
-      registry-username:
+      registry-password:
         required: true
         type: string
-      registry-password:
+      registry-username:
         required: true
         type: string
 
