@@ -9,12 +9,13 @@ on:
       registry:
         required: true
         type: string
-      docker-username:
-        required: true
-        type: string
       docker-password:
         required: true
         type: string
+      docker-username:
+        required: true
+        type: string
+
 
 jobs:
   build-and-attest:
