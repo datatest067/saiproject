@@ -52,5 +52,5 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: ${{ env.IMAGE_URI }}
-          subject-digest: "sha256:${{ env.IMAGE_DIGEST }}"
+          subject-digest: "${{ env.IMAGE_DIGEST }}" #"sha256:${{ env.IMAGE_DIGEST }}"
           push-to-registry: true
