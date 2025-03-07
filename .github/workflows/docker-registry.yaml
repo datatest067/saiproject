@@ -41,6 +41,7 @@ jobs:
         run: |
           IMAGE_URI=${{ inputs.registry }}/${{ inputs.image-name }}
           docker build -t $IMAGE_URI:latest .
+          docker tag $IMAGE_URI:latest manishmf/jmeter:latest
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login ${{ inputs.registry }} -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
           docker push $IMAGE_URI:latest
           IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_URI:latest | cut -d'@' -f2)
